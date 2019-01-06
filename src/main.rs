@@ -1,8 +1,27 @@
 #![deny(warnings)]
 
+use std::env;
+
+#[macro_use]
+extern crate serde_derive;
+
+extern crate serde;
+extern crate reqwest;
+extern crate base64;
 extern crate juniper;
 extern crate juniper_warp;
 extern crate warp;
+
+use base64::{encode};
+
+#[derive(Deserialize)]
+struct Auth {
+    access_token: String,
+    //token_type: String,
+    //scope: String,
+    //expires_in: Number,
+}
+
 
 use juniper::tests::model::Database;
 use juniper::{EmptyMutation, RootNode};
@@ -38,4 +57,31 @@ fn main() {
         .with(log);
 
     warp::serve(routes).run(([127, 0, 0, 1], 3030));
+}
+
+fn get_token() -> Result<String, Box<std::error::Error>> {
+    let client_id = env::var("SPOTIFY_CLIENT_ID").unwrap();
+    let client_secret = env::var("SPOTIFY_CLIENT_SECRET").unwrap();
+
+    let token = format!("{}:{}", client_id, client_secret);
+
+    let auth_header = format!("Basic {}", encode(&token));
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    let val = reqwest::header::HeaderValue::from_str(&auth_header).unwrap();
+
+    headers.insert(reqwest::header::AUTHORIZATION, val);
+
+    let params = [("grant_type", "client_credentials")];
+    let client = reqwest::Client::new();
+    let mut res = client.post("https://accounts.spotify.com/api/token")
+        .headers(headers)
+        .form(&params)
+        .send()?;
+
+    let json: Auth = res.json()?;
+
+    println!("{}", json.access_token);
+
+    Ok(json.access_token)
 }
